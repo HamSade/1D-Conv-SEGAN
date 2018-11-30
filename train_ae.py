@@ -9,17 +9,18 @@ from __future__ import absolute_import
 from __future__ import print_function
 ###########################################
 import argparse
-import os
+#import os
 
 ###########################################
 import torch
 from torch import optim
+import torch.nn.functional as F
 #from torch.autograd import Variable
-#import numpy as np
+import numpy as np
 from time import time
 
 ###########################################
-from dataset_loader import dataset_class, data_loader  #TODO: Mat
+#from dataset_loader import dataset_class, data_loader  #TODO: Fix
 from models import AECONV
 
 ###########################################
@@ -35,18 +36,18 @@ parser.add_argument('--n_latent',  type=int, default=50)  #TODO: set
 parser.add_argument('--n_classes',  type=int, default=2)  #TODO: set
 
 ################## Data
-parser.add_argument('--data', type=str, help='Path to the data directory',
-                    default=os.path.join(os.path.dirname(__file__), '../data/...')) #TODO: to be completed for data loading
-parser.add_argument('--log_dir', type=str, help='Directory relative which all output files are stored',
-                    default='/log/') 
-parser.add_argument('--small_part', dest='small_part', action='store_false')    
+#parser.add_argument('--data', type=str, help='Path to the data directory',
+#                    default=os.path.join(os.path.dirname(__file__), '../data/...')) #TODO: to be completed for data loading
+#parser.add_argument('--log_dir', type=str, help='Directory relative which all output files are stored',
+#                    default='/log/') 
+#parser.add_argument('--small_part', dest='small_part', action='store_false')    
 
 ################## Training                                                    
 parser.add_argument('--n_iters', type=int, default=100000)                    
-parser.add_argument('--batch_size', type=int, default=16)
+parser.add_argument('--batch_size', type=int, default=32)
 parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
-parser.add_argument('--beta_1', type=float, default=0.9,help='beta_1 for Adam')
-parser.add_argument('--beta_2', type=float, default=0.999,
+parser.add_argument('--b1', type=float, default=0.9,help='beta_1 for Adam')
+parser.add_argument('--b2', type=float, default=0.999,
                     help='beta_2 for Adam')  
                     
 parser.add_argument('--print_every', type=int, default=50)
@@ -76,7 +77,7 @@ def train(x, targets, model, opts, losses):
     dec_opt.zero_grad()
     cls_opt.zero_grad()
    
-    dec_out, cls_ = model(x, ae_loss)
+    dec_out, cls_ = model(x)
 
     ae_loss_  = ae_loss(x, dec_out)
     cls_loss_ = cls_loss(cls_, targets)
@@ -92,12 +93,11 @@ def train(x, targets, model, opts, losses):
     return ae_loss_.item(), cls_loss_.item()
     
 #%%
-def trainIters(train_data, train_targets, model):
+def trainIters(train_info, model):
     start = time()
-    print_loss_ae = 0  # Reset every print_every
         
-    ae_params = list(model.encoder.parameters()) + list(model.decoder.parameters())
-    print(ae_params)
+#    ae_params = list(model.encoder.parameters()) + list(model.decoder.parameters())
+#    print(ae_params)
     
     # SGD
 #    enc_opt = optim.SGD(model.encoder.parameters(), lr=learning_rate)
@@ -112,17 +112,21 @@ def trainIters(train_data, train_targets, model):
     opts = (enc_opt, dec_opt, cls_opt)
     
     ae_loss = torch.nn.MSELoss()
-    cls_loss = torch.nn.BCELoss()  #TODO: change if required based off your targets representation
+    cls_loss = F.cross_entropy #torch.nn.BCELoss()  #TODO: change if required based off your targets representation
     losses = (ae_loss, cls_loss)
     
-    print_loss_ae = 0
-    
+   
     # Logging and saving
     with open(args.log_train_file, 'a') as log_tf:
         pass # Just to remove previous logs
             
     ## Training iterations
     for step in range(1, args.n_iters + 1):
+        
+#        train_data = train_info['data']
+#        train_targets = train_info['targets']
+        train_data = Tensor( np.random.rand(args.batch_size, args.n_times, args.n_feats) ) #TODO: fix pls
+        train_targets = Tensor( np.random.randint(low=0, high=2, size=(args.batch_size)) ) #TODO: fix pls
             
         ae_loss_, cls_loss_ = train(train_data, train_targets, model, opts, losses)
         
@@ -133,7 +137,6 @@ def trainIters(train_data, train_targets, model):
                     iteration=step, ae_loss=ae_loss_, cls_loss=cls_loss_))
                     
         # AE loss print
-        print_loss_ae += ae_loss
         if step % args.print_every == 0:
             print("iteration = ", step)
             print("progress= {}, ae_loss= {}, cls_loss= {}, time_elapsed= {}".format(step*100./args.n_iters, ae_loss_,
@@ -158,13 +161,18 @@ def trainIters(train_data, train_targets, model):
 def main():
     
     # Loading Data #TODO: Needs to be changed it according your loader
-    dataset_ = dataset_class(phase="train")
-    train_data, train_targets = data_loader(dataset_, args.batch_size) #TODO: Assuming train_data is the actual batch sample of size [bs x n_times x n_feats] maybe after next(iter(data_loader_obj))
-     
+    
+    '''#TODO: Here I assume None is passed instead opf data and later generate some random batch
+    # However in the real run, training batch of size [bs x n_times x n_feats] should be passed
+    and data and targets become splitted later in the trainIters function'''
+#    dataset_ = dataset_class(phase="train") #TODO: Go to datset_loader and implement pls
+#    train_info = data_loader(dataset_, args.batch_size)
+    
     device = torch.device('cuda' if torch.cuda.device_count() != 0 else 'cpu')    
-    model = AECONV(args.K, args.input_size, args.hidden_size, args.output_size, device)#.cuda(device=device)
+    model = AECONV(args.n_times, args.n_feats, args.n_latent, device, args.n_classes).cuda(device=device)
+    
     #training
-    trainIters(train_data, train_targets, model)
+    trainIters(None, model) #TODO: fix None
                             
 #%%
 if __name__ == "__main__":

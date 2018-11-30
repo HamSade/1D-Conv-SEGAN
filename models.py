@@ -22,8 +22,8 @@ class AECONV(nn.Module):
         
         super(AECONV, self).__init__()
         self.device = device
-        self.encoder = EncoderCNN(n_times, n_feats, n_latent).cuda(device=device)
-        self.decoder = DecoderCNN(n_times, n_feats, n_latent).cuda(device=device)
+        self.encoder = EncoderCNN(n_times, n_feats, n_latent)
+        self.decoder = DecoderCNN(n_times, n_feats, n_latent)
         self.classifier = Classifier(n_times, n_latent, n_classes)
         
     ################################################################################         
@@ -33,13 +33,6 @@ class AECONV(nn.Module):
         class_ = self.classifier(enc_out)            
         out = self.decoder(enc_out)
         return out, class_
-        
-#%%
-def init_weights(self):
-        """Initialize weights for convolution layers using Xavier initialization."""
-        for m in self.modules():
-            if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
-                nn.init.xavier_normal_(m.weight.data)
                 
 #%% The Encoder
 class EncoderCNN(nn.Module):
@@ -65,7 +58,7 @@ class EncoderCNN(nn.Module):
         # initialize weights
         self.init_weights()
         
-    def forward(self, x, hidden):
+    def forward(self, x):
         x = x.transpose(1,2) #[bs, n_times, n_feats] ---> [bs, n_feats, n_times]
         output = x #.contiguous().view(1, 1, -1)
         
@@ -75,9 +68,15 @@ class EncoderCNN(nn.Module):
         output = self.enc2_nl(output)
         output = self.enc3(output)
         output = self.enc3_nl(output)
-        output = self.enc4_nl(output)
+        output = self.enc4(output)
         
         return output #[bs, n_latent, n_times]
+        
+    def init_weights(self):
+        """Initialize weights for convolution layers using Xavier initialization."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
+                nn.init.xavier_normal_(m.weight.data)
 
 #%%
 class DecoderCNN(nn.Module):
@@ -114,21 +113,29 @@ class DecoderCNN(nn.Module):
 
         return output.transpose(1,2) #[bs, n_times, n_latent]
         
+    def init_weights(self):
+        """Initialize weights for convolution layers using Xavier initialization."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d) or isinstance(m, nn.ConvTranspose1d):
+                nn.init.xavier_normal_(m.weight.data)
+        
 #%%
 class Classifier(nn.Module):
     def __init__(self, n_times, n_latent, n_classes):
         super(Classifier, self).__init__()   
         
         # Encoder output = #[bs, n_latent, n_times]
-        n_latent_times = n_times * n_latent
-        h1 = int(n_latent_times//2)
-        h2 = int(n_latent_times//4)
-        self.fnn1 = nn.Linear(n_latent_times, h1)
+        self.n_latent_times = n_times * n_latent
+        h1 = int(self.n_latent_times//2)
+        h2 = int(self.n_latent_times//4)
+        self.fnn1 = nn.Linear(self.n_latent_times, h1)
         self.fnn2 = nn.Linear(h1, h2)
         self.fnn3 = nn.Linear(h2, n_classes)
         self.hid_softmax = nn.Softmax(dim=1)
 
-    def forward(self, h):        
+    def forward(self, h): 
+        h = h.contiguous().view(-1, self.n_latent_times)
+        print("h.shape = ", h.shape)
         h = self.fnn1(h)
         h = self.fnn2(h)
         h = self.fnn3(h)
