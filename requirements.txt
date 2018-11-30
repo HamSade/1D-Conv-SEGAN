@@ -1,2 +1,2 @@
 pip install --user torch torchvision
-pip intsall --user numpy 
+pip intsall --user numpy sklearn pickle

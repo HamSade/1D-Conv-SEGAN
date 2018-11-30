@@ -66,7 +66,7 @@ print("args = ", args)
 
 cuda = True if torch.cuda.is_available() else False
 Tensor = torch.cuda.FloatTensor if cuda else torch.FloatTensor
-
+Tensor_Long = torch.cuda.LongTensor if cuda else torch.LongTensor
 
 def train(x, targets, model, opts, losses):
     
@@ -77,23 +77,23 @@ def train(x, targets, model, opts, losses):
     dec_opt.zero_grad()
     cls_opt.zero_grad()
    
-    dec_out, cls_ = model(x)
+    dec_out, cls_, _, _ = model(x)
 
     ae_loss_  = ae_loss(x, dec_out)
     cls_loss_ = cls_loss(cls_, targets)
     
-    ae_loss_.backward()#retain_graph=True)
+    ae_loss_.backward(retain_graph=True)
     dec_opt.step() #TODO: the order matters
     enc_opt.step()
     
-    cls_loss_.backward()#retain_graph=True)
+    cls_loss_.backward(retain_graph=True)
     cls_opt.step() #TODO: the order matters
     enc_opt.step()
 
     return ae_loss_.item(), cls_loss_.item()
     
 #%%
-def trainIters(train_info, model):
+def trainIters(train_info, model, device):
     start = time()
         
 #    ae_params = list(model.encoder.parameters()) + list(model.decoder.parameters())
@@ -114,11 +114,6 @@ def trainIters(train_info, model):
     ae_loss = torch.nn.MSELoss()
     cls_loss = F.cross_entropy #torch.nn.BCELoss()  #TODO: change if required based off your targets representation
     losses = (ae_loss, cls_loss)
-    
-   
-    # Logging and saving
-    with open(args.log_train_file, 'a') as log_tf:
-        pass # Just to remove previous logs
             
     ## Training iterations
     for step in range(1, args.n_iters + 1):
@@ -126,7 +121,7 @@ def trainIters(train_info, model):
 #        train_data = train_info['data']
 #        train_targets = train_info['targets']
         train_data = Tensor( np.random.rand(args.batch_size, args.n_times, args.n_feats) ) #TODO: fix pls
-        train_targets = Tensor( np.random.randint(low=0, high=2, size=(args.batch_size)) ) #TODO: fix pls
+        train_targets = Tensor_Long ( np.random.randint(low=0, high=2, size=(args.batch_size)) ) #TODO: fix pls
             
         ae_loss_, cls_loss_ = train(train_data, train_targets, model, opts, losses)
         
@@ -138,13 +133,12 @@ def trainIters(train_info, model):
                     
         # AE loss print
         if step % args.print_every == 0:
-            print("iteration = ", step)
-            print("progress= {}, ae_loss= {}, cls_loss= {}, time_elapsed= {}".format(step*100./args.n_iters, ae_loss_,
-                  cls_loss_, time()-start))
+            print("progress= {}/100, ae_loss= {:.4f}, cls_loss= {:.4f}, time_elapsed= {:.3f} h".format(step*100./args.n_iters,
+                  ae_loss_, cls_loss_, (time()-start)/3600.0  ))
                   
         # Saving model              
         if step  % args.save_every == 0:
-            checkpoint = {'model': model.state_dict(),                    
+            checkpoint = {'model': model,#.state_dict(),                    
                           'args': args,
                           'iteration': step}
 
@@ -152,10 +146,13 @@ def trainIters(train_info, model):
                 model_name = args.save_path + '_ael_{ae_loss:2.6f}_cll_{cls_loss:2.6f}.chkpt'.format(
                 ael=ae_loss_, cls_loss=cls_loss_)
                 torch.save(checkpoint, model_name)
+                print("*"*20, "model saved")
                 
             elif args.save_mode == 'best':
                 model_name = args.save_path + '.chkpt'
                 torch.save(checkpoint, model_name)
+                print("*"*20, "model saved")
+
 
 #%% Training
 def main():
@@ -172,7 +169,7 @@ def main():
     model = AECONV(args.n_times, args.n_feats, args.n_latent, device, args.n_classes).cuda(device=device)
     
     #training
-    trainIters(None, model) #TODO: fix None
+    trainIters(None, model, device=device) #TODO: fix None
                             
 #%%
 if __name__ == "__main__":
