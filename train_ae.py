@@ -153,7 +153,6 @@ def trainIters(train_info, model, device):
                 torch.save(checkpoint, model_name)
                 print("*"*20, "model saved")
 
-
 #%% Training
 def main():
     
